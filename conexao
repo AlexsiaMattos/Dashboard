@@ -1,0 +1,52 @@
+from machine import Pin
+from funcoes import ativaWifi, procMsg
+from ntptime import settime
+from time import sleep_ms, localtime, time
+from json import loads, dumps
+from umqtt.robust import MQTTClient
+import onewire
+import ds18x20
+
+rede = 'Wokwi-GUEST'
+senha = ''
+clientId = 'nbs240404'
+broker = 'demo.thingsboard.io'
+token= 'utagrxg8k4nira8p5na0' 
+topico = b'v1/devices/me/telemetry'
+topRPCReq = 'v1/devices/me/rpc/request/'
+topRPCResp = 'v1/devices/me/rpc/response/'
+
+conexao, conectado = ativaWifi(rede,senha)
+print (conectado)
+
+if conectado:
+    settime()
+    mqtt = MQTTClient(clientId, broker, user = token, password='')
+    mqtt.set_callback(procMsg)
+    mqtt.connect()
+    mqtt.subscribe((topRPCReq+'+').encode())
+
+dados = {'ts': time()*1000, 
+         'temperatura': 36.54}
+
+sensor = Pin(4, Pin.IN)
+ds18b20 = ds18x20.DS18X20(onewire.OneWire(sensor))
+roms = ds18b20.scan()
+
+while True:
+    ds18b20.convert_temp()
+    for rom in roms:
+        temperatura = ds18b20.read_temp(rom)
+
+    sleep_ms(750)
+
+    mqtt.check_msg()
+
+    dados['ts'] = (time() + 31557600)*1000
+    dados['temperatura'] = temperatura
+    
+    payload = dumps(dados).encode()
+    
+    print (dados)
+    mqtt.publish(topico, payload)
+    sleep_ms(5000)
